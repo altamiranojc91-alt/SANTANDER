@@ -38,12 +38,12 @@ table{border-collapse:collapse;width:100%;font-size:13px}th,td{text-align:left;p
 <div id="err"></div>
 <div id="app" class="hide">
   <details class="card cfg" style="margin-bottom:16px"><summary>⚙️ Configurar columnas (se detectan automáticamente)</summary><div class="map" id="map" style="margin:12px 0 0"></div></details>
-  <div class="card" id="fb" style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin-bottom:16px"><label>Desde<input type="date" id="d1"></label><label>Hasta<input type="date" id="d2"></label><button id="dclr" style="margin:0">Quitar filtro</button><span id="dinfo" class="mu" style="font-size:13px"></span></div>
+  <div class="card" id="fb" style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin-bottom:16px"><label id="fag">Agencia / oficina<select id="fa" style="width:auto;min-width:220px"></select></label><label>Desde<input type="date" id="d1"></label><label>Hasta<input type="date" id="d2"></label><button id="dclr" style="margin:0">Quitar filtros</button><span id="dinfo" class="mu" style="font-size:13px"></span></div>
   <details class="card" id="pv" style="margin-bottom:16px;overflow:auto"></details>
   <div class="kpis" id="kpis"></div>
   <h2 class="sec">💡 Hallazgos clave</h2><div class="ins" id="ins"></div>
   <div class="grid">
-    <div class="card" id="w7"><h3>🏢 Oficinas con más alarmas<small>Haz clic en una barra para ver su detalle al final de la página</small></h3><div class="ch" style="height:340px"><canvas id="c7"></canvas></div></div>
+    <div class="card" id="w7"><h3>🏢 Oficinas con más alarmas<small>Haz clic en una barra para filtrar todo el panel por esa agencia</small></h3><div class="ch" style="height:340px"><canvas id="c7"></canvas></div></div>
     <div class="card"><h3>🕒 ¿A qué hora ocurren?<small>Las barras rojas marcan las horas más críticas</small></h3><div class="ch"><canvas id="c1"></canvas></div></div>
     <div class="card"><h3>📅 Evolución por día<small>Cantidad de alarmas en cada fecha</small></h3><div class="ch"><canvas id="c2"></canvas></div></div>
     <div class="card" id="w3" style="grid-column:1/-1"><h3>⚠️ Tipos de alarma más frecuentes<small>Haz clic en una barra para ver el detalle de esa alarma</small></h3><div class="two"><div class="ch" style="height:400px"><canvas id="c3"></canvas></div><div id="ad"></div></div></div>
@@ -74,7 +74,7 @@ function load(file){
       var ws=wb.Sheets[wb.SheetNames[0]];
       rows=XLSX.utils.sheet_to_json(ws,{defval:"",raw:true});
       if(!rows.length)throw new Error("El archivo no tiene filas.");
-      cols=Object.keys(rows[0]);M={};document.getElementById("d1").value=document.getElementById("d2").value="";
+      cols=Object.keys(rows[0]);M={};document.getElementById("fa").innerHTML="";document.getElementById("d1").value=document.getElementById("d2").value="";
       document.getElementById("app").classList.remove("hide");buildMap();render();Object.keys(charts).forEach(function(k){charts[k].resize()});
       document.getElementById("app").classList.remove("hide");
     }catch(x){document.getElementById("err").textContent="No se pudo leer el archivo: "+x.message}
@@ -149,8 +149,8 @@ document.getElementById("q").oninput=function(){shown=100;tbl()};
 document.getElementById("fo").onchange=document.getElementById("fs").onchange=function(){shown=100;tbl()};
 document.getElementById("more").onclick=function(){shown+=200;tbl()};
 document.getElementById("fclr").onclick=function(){fdesc="";tbl()};
-document.getElementById("d1").onchange=document.getElementById("d2").onchange=function(){render()};
-document.getElementById("dclr").onclick=function(){document.getElementById("d1").value=document.getElementById("d2").value="";render()};
+document.getElementById("d1").onchange=document.getElementById("d2").onchange=document.getElementById("fa").onchange=function(){render()};
+document.getElementById("dclr").onclick=function(){document.getElementById("d1").value=document.getElementById("d2").value=document.getElementById("fa").value="";render()};
 function wrap(s,n){var w=String(s).split(" "),l=[],c="";w.forEach(function(x){if((c+" "+x).trim().length>n){l.push(c);c=x}else c=(c+" "+x).trim()});if(c)l.push(c);return l}
 function showAlarm(i){
   var name=TOP[i][0],rs=DATA.filter(function(x){return norm(x.desc)===name}),n=rs.length;
@@ -184,8 +184,13 @@ function render(){
   var mn=data[0].d,mx2=data[data.length-1].d,v1=document.getElementById("d1").value,v2=document.getElementById("d2").value;
   var ra=v1?new Date(v1+"T00:00:00"):null,rb=v2?new Date(v2+"T23:59:59"):null;
   data=data.filter(function(x){return (!ra||x.d>=ra)&&(!rb||x.d<=rb)});
+  var dAll=data,ofsAll=M.of?count(dAll.map(function(x){return x.of})):[],sa=document.getElementById("fa"),prev=sa.value;
+  sa.innerHTML='<option value="">Todas las agencias</option>'+ofsAll.map(function(x){return '<option>'+esc(x[0])+'</option>'}).join("");
+  sa.value=prev;if(sa.value!==prev)sa.value="";
+  document.getElementById("fag").style.display=M.of?"":"none";
+  if(sa.value)data=data.filter(function(x){return norm(x.of)===sa.value});
   document.getElementById("dinfo").textContent="Datos disponibles: "+mn.toLocaleDateString("es-PE")+" – "+mx2.toLocaleDateString("es-PE")+" · "+data.length.toLocaleString("es-PE")+" alarmas en el rango";
-  if(!data.length){err.textContent="No hay alarmas en el rango de fechas elegido.";Object.keys(charts).forEach(function(k){charts[k].destroy();delete charts[k]});DATA=[];tbl();document.getElementById("kpis").innerHTML="";document.getElementById("ad").innerHTML="";return}
+  if(!data.length){err.textContent="No hay alarmas con los filtros elegidos.";Object.keys(charts).forEach(function(k){charts[k].destroy();delete charts[k]});DATA=[];tbl();document.getElementById("kpis").innerHTML="";document.getElementById("ad").innerHTML="";return}
   var dias={},hrs=Array(24).fill(0),sem=Array(7).fill(0);
   data.forEach(function(x){
     var k=x.d.getFullYear()+"-"+String(x.d.getMonth()+1).padStart(2,"0")+"-"+String(x.d.getDate()).padStart(2,"0");
@@ -197,11 +202,13 @@ function render(){
   var ofs=M.of?count(data.map(function(x){return x.of})):[];
   var diaMax=dk.reduce(function(a,b){return dias[b]>dias[a]?b:a});
   var kp=[["Total de alarmas",data.length.toLocaleString("es-PE")],["Periodo",fmt(data[0].d)==fmt(data[data.length-1].d)?fmt(data[0].d):fmt(data[0].d)+" – "+fmt(data[data.length-1].d)],["Promedio por día",(data.length/dk.length).toFixed(1)],["Hora pico",String(pico).padStart(2,"0")+":00 ("+hrs[pico]+")"],["Día con más alarmas",diaMax.split("-").reverse().join("/")+" ("+dias[diaMax]+")"]];
-  if(ofs.length)kp.push(["Oficina con más alarmas",ofs[0][0]+" ("+ofs[0][1]+")"]);
+  if(ofs.length&&!sa.value)kp.push(["Oficina con más alarmas",ofs[0][0]+" ("+ofs[0][1]+")"]);
+  if(sa.value)kp.push(["Agencia analizada",sa.value]);
   if(top.length)kp.push(["Alarma más frecuente",top[0][0]]);
   document.getElementById("kpis").innerHTML=kp.map(function(k,i){return '<div class="card k" style="--c:'+["#2563eb","#10b981","#f59e0b","#ef4444","#8b5cf6","#06b6d4","#f97316"][i%7]+'"><small>'+k[0]+'</small><div title="'+String(k[1]).replace(/"/g,"")+'">'+String(k[1]).replace(/</g,"&lt;")+'</div></div>'}).join("");
   var tot=data.length,pc=function(n){return (n/tot*100).toFixed(0)+"%"},ins=[];
-  if(ofs.length)ins.push(["#2563eb","🏢 La oficina <b>"+esc(ofs[0][0])+"</b> concentra <b>"+pc(ofs[0][1])+"</b> de las alarmas ("+ofs[0][1].toLocaleString("es-PE")+")."+(ofs.length>2?" Las 3 primeras suman <b>"+pc(ofs[0][1]+ofs[1][1]+ofs[2][1])+"</b>.":"")]);
+  if(sa.value)ins.push(["#2563eb","🏢 Estás viendo solo la agencia <b>"+esc(sa.value)+"</b>: <b>"+tot.toLocaleString("es-PE")+"</b> alarmas, el <b>"+(tot/dAll.length*100).toFixed(0)+"%</b> del total del periodo."]);
+  if(ofs.length&&!sa.value)ins.push(["#2563eb","🏢 La oficina <b>"+esc(ofs[0][0])+"</b> concentra <b>"+pc(ofs[0][1])+"</b> de las alarmas ("+ofs[0][1].toLocaleString("es-PE")+")."+(ofs.length>2?" Las 3 primeras suman <b>"+pc(ofs[0][1]+ofs[1][1]+ofs[2][1])+"</b>.":"")]);
   if(top.length)ins.push(["#f59e0b","⚠️ La alarma más frecuente es <b>"+esc(top[0][0])+"</b>: <b>"+pc(top[0][1])+"</b> del total."+(top.length>2?" Los 3 tipos principales explican <b>"+pc(top[0][1]+top[1][1]+top[2][1])+"</b>.":"")]);
   ins.push(["#ef4444","🕒 La hora más crítica es <b>"+String(pico).padStart(2,"0")+":00</b> con <b>"+hrs[pico]+"</b> alarmas (<b>"+pc(hrs[pico])+"</b> del total)."]);
   var dn=["lunes","martes","miércoles","jueves","viernes","sábado","domingo"],sp=sem.indexOf(Math.max.apply(null,sem));
@@ -213,8 +220,8 @@ function render(){
   document.getElementById("fo").style.display=ofs.length?"":"none";
   document.getElementById("fs").style.display=M.sev?"":"none";
   document.getElementById("w7").style.display=ofs.length?"":"none";
-  var o15=ofs.slice(0,15);
-  if(o15.length)mk("c7","bar",o15.map(function(x){return x[0]}),o15.map(function(x){return x[1]}),{indexAxis:"y",onClick:function(e,els){if(els.length){var s=document.getElementById("fo");s.value=o15[els[0].index][0];shown=100;tbl();s.scrollIntoView({behavior:"smooth",block:"center"})}}});
+  var o15=ofsAll.slice(0,15);
+  if(o15.length)mk("c7","bar",o15.map(function(x){return x[0]}),o15.map(function(x){return x[1]}),{indexAxis:"y",onClick:function(e,els){if(els.length){var s=document.getElementById("fa");s.value=o15[els[0].index][0];setTimeout(render,0)}}});
   tbl();
   mk("c1","bar",hrs.map(function(_,i){return i+"h"}),hrs);
   mk("c2",dk.length<=31?"bar":"line",dk.map(function(k){return k.split("-").reverse().join("/")}),dk.map(function(k){return dias[k]}));
